@@ -1,0 +1,87 @@
+---
+title: "Forcasting project proposal"
+author: "Baboucarr Dibba"
+format: typst
+fontsize: 10pt
+editor: visual
+execute:
+  warning: false
+  message: false
+  echo: false
+---
+
+Repo link: <https://github.com/B-Dibba/Forcasting-Project> . Script included for reference and reproducibility
+
+## 1. Target Variable
+
+The target is **U.S. New Privately-Owned Housing Units Started, Not Seasonally Adjusted** (FRED series: `HOUSTNSA`). It counts, in thousands of units, how many new privately-owned residential structures (single-family homes, multi-family buildings, and related dwellings) broke ground in a given calendar month. Published monthly by the U.S. Census Bureau and HUD.
+
+## 2. Who Wants the Forecast
+
+A building manager or operator like the Chief Operating Officer (COO) of a mid-size regional homebuilding company might want the forecast. A 3-month-ahead forecast of industry wide starts informs three quarterly decisions: (i) subcontractor hiring and releases (lead time: 4–6 weeks); (ii) materials procurement: lumber, concrete, and drywall must be ordered 6–10 weeks ahead; (iii) draws on the company's revolving construction credit line. A builder who accurately forecasts starts can time procurement to avoid price spikes, staff up before competitors, and manage credit exposure.
+
+## 3. Data Source
+
+Data are freely available from **FRED** (Federal Reserve Bank of St. Louis) at <https://fred.stlouisfed.org/series/HOUSTNSA>. No permission is required since this is public-domain U.S. government data. It may take forever to view and download the series manually from the site. So data are pulled programmatically using the `fredr` R package with a free API key obtainable at <https://fred.stlouisfed.org/docs/api/api_key.html>. Please see the script for the full code used.
+
+```{r}
+#| label: setup
+#| include: false
+library(fredr)
+library(fpp3)
+
+fredr_set_key("ceec410cf8cc56d48b14af7fbc5ed297")
+
+housing <- fredr(series_id = "HOUSTNSA") |>
+  transmute(Month = yearmonth(date), starts = value) |>
+  as_tsibble(index = Month) |>
+  filter_index("1959 Jan" ~ .)
+```
+
+## 4. Frequency and Sample
+
+The series is monthly, spanning January 1959 to September 2026 with around 813 observations. I check the data (see script in repo) and confirmed zero missing values, no implicit calendar gaps, and no implausible (zero or negative) entries. The minimum is 31.9 thousand units and the maximum is 234 thousand units. Three issues:
+
+\(a\) COVID-19 disruption: April 2020 recorded 84.9 thousand starts versus 117 in April 2019,\
+a 27% year-over-year decline, followed by a rapid recovery highs by late 2020;
+
+\(b\) Great Recession collapse: Starts fell from roughly 190 thousand in spring 2006 to the\
+series minimum of 31.9 thousand, the steepest sustained decline on record;
+
+\(c\) strong seasonality: The NSA series peaks each spring and troughs each winter. This\
+pattern will be modeled directly rather than removed.
+
+## 5. Forecast Horizons
+
+The primary horizon is h = 3 months ahead, matching the COO's procurement and staffing lead times. The TS-CV evaluation will span h = 1, 2, and 3 for accuracy degradation and support Diebold–Mariano tests. The final out-of-sample forecast will target December 2026, produced from the September 2026 observation.
+
+## 6. Candidate Predictors
+
+All five predictors are freely available on FRED and pulled via `fredr()`:
+
+| Predictor | FRED ID | Economic Rationale |
+|:-----------------|:------------|:-----------------------------------------|
+| Building permits (NSA) | `PERMITNSA` | Permits precede starts by 1–2 months; only lagged values are usable. |
+| 30-year mortgage rate | `MORTGAGE30US` | Higher rates reduce affordability and suppress demand for new construction. Weekly; averaged to monthly. |
+| Lumber PPI | `WPU0811` | Largest variable input cost; price spikes compress builder margins and delay groundbreakings. |
+| Case-Shiller HPI (NSA) | `CSUSHPINSA` | Rising prices widen builder margins, incentivizing starts. |
+| Consumer Sentiment | `UMCSENT` | Household confidence drives new-home purchase intent; drops historically precede demand slowdowns. |
+
+## 7. Time Series Plot
+
+```{r}
+#| label: fig-housing
+#| fig-cap: "U.S. New Privately-Owned Housing Units Started (NSA), January 1959–September 2026 (813 monthly observations; no missing values or gaps). Source: U.S. Census Bureau & HUD via FRED (HOUSTNSA)."
+#| fig-height: 2.8
+#| fig-width: 6.5
+housing |>
+  autoplot(starts, colour = "steelblue4", linewidth = 0.4) +
+  labs(y = "Thousands of Units", x = NULL) +
+  theme_minimal(base_size = 10)
+```
+
+The figure reveals three dominant features: persistent within-year **seasonality** (spring peaks, winter troughs); large **business cycle** swings, including the 1972 boom (peak: 234 thousand units) and the 2008–2010 bust (trough: 31.9 thousand); and a brief but sharp **COVID dip** inspring 2020. Seasonal swings are roughly proportional to the level over the sample, motivating a **log transformation** for the final report.
+
+```{r}
+
+```
